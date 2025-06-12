@@ -1,10 +1,10 @@
 // src/pages/Login.tsx
-import { useForm } from "react-hook-form";
+import { useForm, SubmitHandler } from "react-hook-form"; // Impor SubmitHandler
 import { Link, useNavigate } from "react-router-dom";
-import { useAuth, User } from "../utils/AuthProvider"; // Import User dari AuthProvider
-import axios from "../utils/AxiosInstance";
+import { useAuth } from "../utils/AuthProvider";
 import { useMutation } from "@tanstack/react-query";
 import toast from 'react-hot-toast';
+import { loginApi } from '../services/authApiService'; // Pastikan file ini ada
 
 // Tipe untuk input form login
 export type LoginInput = {
@@ -12,75 +12,61 @@ export type LoginInput = {
   password: string;
 };
 
-// Tipe untuk respons dari API login
-interface LoginResponse {
-  access_token: string;
-  user: User; // Menggunakan tipe User yang sudah kita definisikan
-}
-
 const Login = () => {
   const navigate = useNavigate();
-  const { login } = useAuth(); // Fungsi login dari AuthProvider
+  const { login } = useAuth();
   const {
     register,
     handleSubmit,
     formState: { errors }
   } = useForm<LoginInput>();
 
-  // Fungsi yang menangani logika saat login
-  const handleLogin = async (data: LoginInput) => {
-    try {
-      const res = await axios.post<LoginResponse>("/auth/login", data);
-
-      // Pengecekan respons dari server sudah benar
-      if (res.data && res.data.access_token && res.data.user?.role) {
-        // Memanggil fungsi login dari context dengan token dan data user
-        login(res.data.access_token, res.data.user);
+  // Konfigurasi useMutation untuk menggunakan 'loginApi'
+  const { mutate, isPending } = useMutation({
+    mutationFn: loginApi,
+    onSuccess: (data) => {
+      // Logika setelah login berhasil
+      if (data && data.access_token && data.user?.role) {
+        login(data.access_token, data.user);
         toast.success("Login berhasil!");
-        navigate("/"); // Arahkan ke halaman utama setelah berhasil
+        navigate("/");
       } else {
-        throw new Error("Data login tidak lengkap dari server.");
+        toast.error("Respons dari server tidak lengkap.");
       }
-    } catch (err: any) {
+    },
+    onError: (err: any) => {
+      // Penanganan error terpusat
       console.error("Login error:", err);
       const errorMessage = err.response?.data?.message || "Username atau password salah.";
       toast.error(errorMessage);
     }
+  });
+
+  // PERUBAHAN: Membuat fungsi handler submit yang eksplisit
+  const onSubmit: SubmitHandler<LoginInput> = (data) => {
+    mutate(data);
   };
 
-  const { mutate, isPending } = useMutation({
-    mutationFn: handleLogin,
-  });
-  
-  // Style untuk konsistensi
   const inputStyle = "w-full p-3 border rounded-md focus:outline-none focus:ring-2 shadow-sm";
   const errorBorderStyle = "border-red-500 focus:ring-red-500";
   const defaultBorderStyle = "border-gray-300 focus:ring-blue-500";
-
+  
   return (
     <div className="flex min-h-screen bg-gray-100">
-      {/* Sisi Kiri - Branding */}
       <div className="w-full md:w-1/2 lg:w-3/5 flex flex-col justify-center items-center p-8 md:p-16 bg-gradient-to-br from-blue-600 to-blue-800 text-white">
-        <svg xmlns="http://www.w3.org/2000/svg" className="h-20 w-20 mb-6 text-blue-300" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={1.5}>
-          <path strokeLinecap="round" strokeLinejoin="round" d="M12 6.253v11.494m0 0a8.485 8.485 0 0011.921 0M12 17.747a8.485 8.485 0 01-11.921 0M12 6.253a8.485 8.485 0 0111.921 0M12 6.253L5.039 9.06M12 6.253L18.961 9.06M12 17.747L5.039 14.94M12 17.747L18.961 14.94M9 12a3 3 0 11-6 0 3 3 0 016 0zm12 0a3 3 0 11-6 0 3 3 0 016 0z" />
-        </svg>
         <h1 className="text-4xl md:text-5xl font-bold mb-4 text-center">Portal Data Mahasiswa</h1>
         <p className="text-lg md:text-xl text-center mb-8 max-w-md opacity-90">
           Akses informasi akademik, kelola data, dan hubungkan diri dengan komunitas kampus.
         </p>
         <Link to="/register" className="flex items-center bg-white text-blue-700 font-semibold rounded-lg py-3 px-8 hover:bg-blue-50 transition-colors shadow-md">
           <span className="mr-2">Belum punya akun? Daftar</span>
-          <svg xmlns="http://www.w3.org/2000/svg" width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
-            <path d="M5 12h14M12 5l7 7-7 7"/>
-          </svg>
         </Link>
       </div>
-
-      {/* Sisi Kanan - Form Login */}
       <div className="w-full md:w-1/2 lg:w-2/5 bg-white flex items-center justify-center p-8 md:p-12">
         <div className="w-full max-w-sm">
           <h2 className="text-2xl md:text-3xl font-bold text-center text-gray-800 mb-8">Masuk Akun</h2>
-          <form onSubmit={handleSubmit((data) => mutate(data))} className="space-y-6">
+          {/* PERUBAHAN: Menggunakan fungsi 'onSubmit' yang baru */}
+          <form className="space-y-6" onSubmit={handleSubmit(onSubmit)}>
             <div>
               <label className="block text-sm font-medium text-gray-700 mb-1">Username atau Email</label>
               <input type="text" className={`${inputStyle} ${errors.email ? errorBorderStyle : defaultBorderStyle}`} {...register("email", { required: "Field ini wajib diisi" })} placeholder="username atau email@example.com"/>
